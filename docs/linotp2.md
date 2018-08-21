@@ -165,3 +165,32 @@ You can also filter who can access an SP to a subset of usernames within your SP
 ```
 
 Note, the attribute name must match that which contains the username for LinOTP, as mentioned above.
+
+## Optional: Allow other process filters to bypass linotp2.
+
+Other Authentication Process filters can instruct linotp2 to skip 2FA.                    
+
+For that, make sure the filter that wants to skip the check, comes before
+linotp2 in the `authproc` configuration:
+
+```
+  'authproc' => array(
+	      50 => array(
+            'class' => 'module:someauthprocfilter',
+           
+        ),
+        55 => array(
+            'class' => 'linotp2:OTP',
+            ...
+        ),
+   )
+```
+
+In the process() method of that filter, simply make sure to
+set the 'skip_check' flag to TRUE, for `sspmod_linotp2_Auth_Process_OTP` class:
+
+```
+  $request['sspmod_linotp2_Auth_Process_OTP'] = [
+    'skip_check' => TRUE,
+  ];
+```
