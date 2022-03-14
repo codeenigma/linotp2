@@ -12,27 +12,27 @@
  */
 
 if (!array_key_exists('StateId', $_REQUEST)) {
-    throw new SimpleSAML_Error_BadRequest('Missing AuthState parameter.');
+    throw new \SimpleSAML\Error\BadRequest('Missing AuthState parameter.');
 }
 $authStateId = $_REQUEST['StateId'];
-$state = SimpleSAML_Auth_State::loadState($authStateId, 'linotp2:otp:init');
+$state = \SimpleSAML\Auth\State::loadState($authStateId, 'linotp2:otp:init');
 
 $error = false;
 if (array_key_exists('otp', $_POST)) { // we were given an OTP
     try {
-    	if (sspmod_linotp2_Auth_Process_OTP::authenticate($state, $_POST['otp'])) {
-            SimpleSAML_Auth_State::saveState($state, 'linotp2:otp:init');
-            SimpleSAML_Auth_ProcessingChain::resumeProcessing($state);
+    	if (\SimpleSAML\Module\linotp2\Auth\Process\OTP::authenticate($state, $_POST['otp'])) {
+            \SimpleSAML\Auth\State::saveState($state, 'linotp2:otp:init');
+            \SimpleSAML\Auth\ProcessingChain::resumeProcessing($state);
         } else {
             $error = '{linotp2:errors:invalid_otp}';
         }
-    } catch (InvalidArgumentException $e) {
+    } catch (\InvalidArgumentException $e) {
         $error = $e->getMessage();
     }
 }
 
-$cfg = SimpleSAML_Configuration::getInstance();
-$tpl = new SimpleSAML_XHTML_Template($cfg, 'linotp2:otp.php');
+$cfg = \SimpleSAML\Configuration::getInstance();
+$tpl = new \SimpleSAML\XHTML\Template($cfg, 'linotp2:otp.php');
 $tpl->data['params'] = array('StateId' => $authStateId);
 $tpl->data['error'] = ($error) ? $tpl->t($error) : false;
 $tpl->show();

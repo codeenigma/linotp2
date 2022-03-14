@@ -10,40 +10,48 @@
  * @package SimpleSAML\Module\linotp2
  */
 
-class sspmod_linotp2_Auth_Process_OTP extends SimpleSAML_Auth_ProcessingFilter
+namespace SimpleSAML\Module\linotp2\Auth\Process;
+
+use SimpleSAML\Auth\ProcessingFilter;
+use SimpleSAML\Logger;
+use SimpleSAML\Configuration;
+use SimpleSAML\Session;
+use SimpleSAML\Auth\State;
+use SimpleSAML\Module;
+use SimpleSAML\Utilities;
+use SimpleSAML\Error\BadRequest;
+
+class OTP extends ProcessingFilter
 {
+    /**
+     * The URL of the LinOTP server
+     */
+    private $linotpserver;
 
-	/**
-	 * The URL of the LinOTP server
-	 */
-	private $linotpserver;
+    /**
+     * The attribute we should use in the $state['Attributes'] array to look up LinOTP username
+     */
+    private $linotpuidattribute;
 
-	/**
-	 * The attribute we should use in the $state['Attributes'] array to look up LinOTP username
-	 */
-	private $linotpuidattribute;
+    /**
+     * If the sslcert should be checked
+     */
+    private $sslverifyhost;
 
-	/**
-	 * If the sslcert should be checked
-	 */
-	private $sslverifyhost;
+    /**
+     * If the sslcert should be checked
+     */
+    private $sslverifypeer;
 
-	/**
-	 * If the sslcert should be checked
-	 */
-	private $sslverifypeer;
+    /**
+     * The realm of the user
+     */
+    private $realm;
 
-	/**
-	 * The realm of the user
-	 */
-	private $realm;
-
-	/**
-	 * The attribute map. It is an array
-	 */
-
-	private $attributemap = array();
-
+    /**
+     * The attribute map. It is an array
+     */
+    private $attributemap = [];
 
     /**
      * OTP constructor.
@@ -57,20 +65,20 @@ class sspmod_linotp2_Auth_Process_OTP extends SimpleSAML_Auth_ProcessingFilter
     {
         parent::__construct($config, $reserved);
 
-        $cfg = \SimpleSAML_Configuration::loadFromArray($config, 'linotp2:OTP');
-        $this->linotpserver= $cfg->getString('linotpserver');
+        $cfg = Configuration::loadFromArray($config, 'linotp2:OTP');
+        $this->linotpserver = $cfg->getString('linotpserver');
         $this->linotpuidattribute = $cfg->getString('linotpuidattribute', 'uid');
-        $this->sslverifyhost= $cfg->getBoolean('sslverifyhost', false);
-        $this->sslverifypeer= $cfg->getBoolean('sslverifypeer', false);
+        $this->sslverifyhost = $cfg->getBoolean('sslverifyhost', FALSE);
+        $this->sslverifypeer = $cfg->getBoolean('sslverifypeer', FALSE);
         $this->realm = $cfg->getString('realm', '');
-        $this->attributemap= $cfg->getArrayize('attributemap', array(
-        		'username' => 'samlLoginName',
-        		'surname' => 'surName',
-        		'givenname' => 'givenName',
-        		'email' => 'emailAddress',
-        		'phone' => 'telePhone',
-        		'mobile' => 'mobilePhone',
-        ));
+        $this->attributemap = $cfg->getArrayize('attributemap', [
+            'username' => 'samlLoginName',
+            'surname' => 'surName',
+            'givenname' => 'givenName',
+            'email' => 'emailAddress',
+            'phone' => 'telePhone',
+            'mobile' => 'mobilePhone',
+        ]);
     }
 
 
@@ -81,7 +89,7 @@ class sspmod_linotp2_Auth_Process_OTP extends SimpleSAML_Auth_ProcessingFilter
      */
     public function process(&$state)
     {
-        $session = \SimpleSAML_Session::getSessionFromRequest();
+        $session = Session::getSessionFromRequest();
         $this->authid = $state['Source']['auth'];
         $key_id = $session->getData('linotp2:auth', $this->authid);
         $attrs = &$state['Attributes'];
@@ -89,14 +97,14 @@ class sspmod_linotp2_Auth_Process_OTP extends SimpleSAML_Auth_ProcessingFilter
         // check for previous auth
         if (!is_null($key_id) && in_array($key_id, $attrs[$this->linotpuidattribute])) {
             // we were already authenticated using a valid yubikey
-            SimpleSAML\Logger::info('Reusing previous OTP authentication with data "'.$key_id.'".');
+            Logger::info('Reusing previous OTP authentication with data "' . $key_id . '".');
             return;
         }
 
-				if (isset($state[self::class]['skip_check']) && $state[self::class]['skip_check']) {
-					SimpleSAML\Logger::info('"skip_check" flag found in the auth state. Skipping OTP authentication.');
-					return;
-				}
+        if (isset($state[self::class]['skip_check']) && $state[self::class]['skip_check']) {
+            Logger::info('"skip_check" flag found in the auth state. Skipping OTP authentication.');
+            return;
+        }
 
         $state['linotp2:otp'] = array(
             'linotpserver' => $this->linotpserver,
@@ -109,11 +117,11 @@ class sspmod_linotp2_Auth_Process_OTP extends SimpleSAML_Auth_ProcessingFilter
             'self' => $this,
         );
 
-        SimpleSAML\Logger::debug('Initiating LinOTP authentication.');
+        Logger::debug('Initiating LinOTP authentication.');
 
-        $sid = \SimpleSAML_Auth_State::saveState($state, 'linotp2:otp:init');
-        $url = SimpleSAML_Module::getModuleURL('linotp2/otp.php');
-        SimpleSAML_Utilities::redirectTrustedURL($url, array('StateId' => $sid));
+        $sid = State::saveState($state, 'linotp2:otp:init');
+        $url = Module::getModuleURL('linotp2/otp.php');
+        Utilities::redirectTrustedURL($url, ['StateId' => $sid]);
     }
 
     /**
@@ -128,8 +136,8 @@ class sspmod_linotp2_Auth_Process_OTP extends SimpleSAML_Auth_ProcessingFilter
     public static function authenticate(array &$state, $otp)
     {
         // validate the state array we're given
-        if (!array_key_exists(\SimpleSAML_Auth_State::STAGE, $state) ||
-            $state[\SimpleSAML_Auth_State::STAGE] !== 'linotp2:otp:init') {
+        if (!array_key_exists(State::STAGE, $state) ||
+            $state[State::STAGE] !== 'linotp2:otp:init') {
             throw new \InvalidArgumentException("{linotp2:errors:invalid_state}");
         }
         $cfg = $state['linotp2:otp'];
@@ -145,60 +153,58 @@ class sspmod_linotp2_Auth_Process_OTP extends SimpleSAML_Auth_ProcessingFilter
         $escPassword = urlencode($otp);
         $escUsername = urlencode($username);
 
-        $url = $cfg['linotpserver'] . '/validate/samlcheck?user='.$escUsername
-        .'&pass=' . $escPassword . '&realm=' . $cfg['realm'];
+        $url = $cfg['linotpserver'] . '/validate/samlcheck?user=' . $escUsername
+            . '&pass=' . $escPassword . '&realm=' . $cfg['realm'];
 
         //throw new Exception("url: ". $url);
-        SimpleSAML\Logger::debug("LinOTP2 URL: " . $url);
+        Logger::debug("LinOTP2 URL: " . $url);
 
         curl_setopt($ch, CURLOPT_URL, $url);
         curl_setopt($ch, CURLOPT_HEADER, TRUE);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
         if ($cfg['sslverifyhost']) {
-        	curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
         } else {
-        	curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
         }
         if ($cfg['sslverifypeer']) {
-        	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 1);
         } else {
-        	curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
         }
 
         $response = curl_exec($ch);
-        $header_size = curl_getinfo($ch,CURLINFO_HEADER_SIZE);
-        $body = json_decode(substr( $response, $header_size ));
+        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $body = json_decode(substr($response, $header_size));
 
-        $status=True;
-        $value=True;
+        $status = TRUE;
+        $value = TRUE;
 
         try {
-        	$status = $body->result->status;
-        	$value = $body->result->value->auth;
+            $status = $body->result->status;
+            $value = $body->result->value->auth;
         } catch (Exception $e) {
-        	throw new SimpleSAML_Error_BadRequest("We were not able to read the response from the LinOTP server: " . $e);
+            throw new BadRequest("We were not able to read the response from the LinOTP server: " . $e);
         }
 
-        if ( False==$status ) {
-          /* We got a valid JSON respnse, but the STATUS is false */
-          SimpleSAML\Logger::info('Valid JSON response, but some internal error occured in LinOTP server.');
-          return false;
+        if (FALSE == $status) {
+            /* We got a valid JSON respnse, but the STATUS is false */
+            Logger::info('Valid JSON response, but some internal error occured in LinOTP server.');
+            return FALSE;
+        } else {
+            /* The STATUS is true, so we need to check the value */
+            if (FALSE == $value) {
+                Logger::info('LinOTP reports invalid OTP for user "' . $username . '".');
+                return FALSE;
+            } else {
+                Logger::info('Successful authentication with LinOTP for user "' . $username . '".');
+                return TRUE;
+            }
         }
-        else {
-        	/* The STATUS is true, so we need to check the value */
-        	if ( False==$value ) {
-            SimpleSAML\Logger::info('LinOTP reports invalid OTP for user "'.$username.'".');
-            return false;
-          }
-          else {
-            SimpleSAML\Logger::info('Successful authentication with LinOTP for user "'.$username.'".');
-            return true;
-        	}
-        }
+
         // Fail safe at the end.
-        return false;
+        return FALSE;
     }
-
 
     /**
      * A logout handler that makes sure to remove the key from the session, so that the user is asked for the key again
@@ -206,9 +212,10 @@ class sspmod_linotp2_Auth_Process_OTP extends SimpleSAML_Auth_ProcessingFilter
      */
     public function logoutHandler()
     {
-        $session = \SimpleSAML_Session::getSessionFromRequest();
+        $session = Session::getSessionFromRequest();
         $keyid = $session->getData('linotp2:auth', $session->getAuthority());
-        SimpleSAML\Logger::info('Removing valid LinOTP authentication with data "'.$keyid.'".');
+        Logger::info('Removing valid LinOTP authentication with data "' . $keyid . '".');
         $session->deleteData('linotp2:auth', $session->getAuthority());
     }
+
 }

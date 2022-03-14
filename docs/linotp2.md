@@ -187,10 +187,10 @@ linotp2 in the `authproc` configuration:
 ```
 
 In the process() method of that filter, simply make sure to
-set the 'skip_check' flag to TRUE, for `sspmod_linotp2_Auth_Process_OTP` class:
+set the 'skip_check' flag to TRUE, for `OTP` class:
 
 ```
-  $request['sspmod_linotp2_Auth_Process_OTP'] = [
+  $request['OTP'] = [
     'skip_check' => TRUE,
   ];
 ```
